@@ -25,6 +25,7 @@ const registerSchema = yup.object({
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [showEmailConfirmation, setShowEmailConfirmation] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState('')
   const { signIn, signUp, clearSession } = useAuth()
@@ -43,10 +44,20 @@ export const AuthPage: React.FC = () => {
   })
 
   const onLogin = async (data: any) => {
+    setLoading(true)
     try {
+      // Show loading toast
+      const loadingToast = toast.loading('Checking credentials...')
+      
       await signIn(data.email, data.password)
+      
+      // Dismiss loading toast and show success
+      toast.dismiss(loadingToast)
       toast.success('Signed in successfully!')
     } catch (error: any) {
+      // Dismiss loading toast
+      toast.dismiss()
+      
       console.error('Login error:', error)
       if (error.message?.includes('Email not confirmed') || error.message?.includes('email_not_confirmed')) {
         toast.error('Please check your email and click the confirmation link to activate your account. Don\'t forget to check your spam/junk folder!')
@@ -55,20 +66,28 @@ export const AuthPage: React.FC = () => {
       } else {
         toast.error('Unable to sign in. Please try again or contact support if the problem persists.')
       }
+    } finally {
+      setLoading(false)
     }
   }
 
   const onRegister = async (data: any) => {
+    setLoading(true)
     try {
+      const loadingToast = toast.loading('Creating your account...')
+      
       await signUp(data.email, data.password, {
         name: data.name,
         phone_number: data.phone_number,
         address: data.address,
         date_of_birth: data.date_of_birth
       })
+      
+      toast.dismiss(loadingToast)
       setRegisteredEmail(data.email)
       setShowEmailConfirmation(true)
     } catch (error: any) {
+      toast.dismiss()
       if (error.message?.includes('User already registered') || error.message?.includes('already registered')) {
         toast.error('Account already exists with this email. Please sign in instead.')
         setTimeout(() => {
@@ -79,6 +98,8 @@ export const AuthPage: React.FC = () => {
       } else {
         toast.error(error.message || 'Error creating account')
       }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -186,9 +207,17 @@ export const AuthPage: React.FC = () => {
 
               <button
                 type="submit"
+                disabled={loading}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all transform hover:scale-105"
               >
-                Sign in
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Signing in...
+                  </div>
+                ) : (
+                  'Sign in'
+                )}
               </button>
             </form>
           ) : (
@@ -306,9 +335,17 @@ export const AuthPage: React.FC = () => {
 
               <button
                 type="submit"
+                disabled={loading}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-medium text-white bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all transform hover:scale-105"
               >
-                Create account
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Creating account...
+                  </div>
+                ) : (
+                  'Create account'
+                )}
               </button>
             </form>
           )}
@@ -317,6 +354,7 @@ export const AuthPage: React.FC = () => {
             <div className="text-center">
               <button
                 onClick={() => setIsLogin(!isLogin)}
+                disabled={loading}
                 className="font-medium text-green-600 hover:text-green-500 transition-colors hover:underline"
               >
                 {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}

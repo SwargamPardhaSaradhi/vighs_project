@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { Leaf, MapPin, Calendar, AlertTriangle, CheckCircle, Plus, Activity, Target } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from 'recharts'
+import { Leaf, MapPin, Calendar, AlertTriangle, CheckCircle, Plus, Activity, Target, TrendingUp, Clock, Shield } from 'lucide-react'
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuth()
@@ -19,7 +19,7 @@ export const Dashboard: React.FC = () => {
   const [treatments, setTreatments] = useState<any[]>([])
   const [diagnoses, setDiagnoses] = useState<any[]>([])
 
-  const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316', '#EC4899']
+  const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#F97316']
 
   useEffect(() => {
     if (user) {
@@ -96,29 +96,78 @@ export const Dashboard: React.FC = () => {
     { name: 'Completed', value: stats.completedTreatments }
   ]
 
-  const diseaseDistribution = diagnoses.reduce((acc: any[], diagnosis) => {
-    const existing = acc.find(item => item.disease === diagnosis.predicted_class)
-    if (existing) {
-      existing.count += 1
-    } else {
-      acc.push({ disease: diagnosis.predicted_class.replace(/_/g, ' '), count: 1 })
-    }
-    return acc
-  }, [])
+  // Generate treatment effectiveness over time
+  const generateTreatmentProgress = () => {
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date()
+      date.setDate(date.getDate() - (6 - i))
+      return date.toISOString().split('T')[0]
+    })
 
-  // Generate monthly progress data based on actual data
-  // Build disease percentage and cured percentage datasets
-  const diseasePercentages = diagnoses.map(d => ({
-    label: new Date(d.created_at).toLocaleDateString(),
-    value: d.confidence ? Math.round((1 - d.confidence) * 100) : stats.averageDiseasePercentage
-  }))
+    return last7Days.map(date => {
+      const dayTreatments = treatments.filter(t => 
+        t.scheduled_date.split('T')[0] === date
+      )
+      const completed = dayTreatments.filter(t => t.completed).length
+      const total = dayTreatments.length
+      
+      return {
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        completed,
+        pending: total - completed,
+        total
+      }
+    })
+  }
 
-  const curedPercentage = (() => {
-    const total = treatments.length
-    if (total === 0) return 0
-    const completed = treatments.filter(t => t.completed).length
-    return Math.round((completed / total) * 100)
-  })()
+  // Generate crop health trend
+  const generateCropHealthTrend = () => {
+    const last30Days = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date()
+      date.setDate(date.getDate() - (29 - i))
+      return date
+    })
+
+    return last30Days.map((date, index) => {
+      // Simulate improving health over time based on treatments
+      const completedTreatments = treatments.filter(t => 
+        new Date(t.scheduled_date) <= date && t.completed
+      ).length
+      
+      const baseHealth = Math.max(20, 100 - stats.averageDiseasePercentage)
+      const improvement = Math.min(30, completedTreatments * 5)
+      const healthScore = Math.min(100, baseHealth + improvement)
+      
+      return {
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        health: healthScore,
+        disease: Math.max(0, 100 - healthScore)
+      }
+    }).filter((_, index) => index % 3 === 0) // Show every 3rd day for cleaner chart
+  }
+
+  // Generate pesticide usage statistics
+  const generatePesticideUsage = () => {
+    const pesticideStats = treatments.reduce((acc: any, treatment) => {
+      const name = treatment.pesticide_name.split(' ')[0] // Get first word for shorter names
+      if (!acc[name]) {
+        acc[name] = { used: 0, effective: 0 }
+      }
+      acc[name].used += 1
+      if (treatment.completed) {
+        acc[name].effective += 1
+      }
+      return acc
+    }, {})
+
+    return Object.entries(pesticideStats)
+      .map(([pesticide, stats]: [string, any]) => ({
+        pesticide,
+        used: stats.used,
+        effectiveness: stats.used > 0 ? Math.round((stats.effective / stats.used) * 100) : 0
+      }))
+      .slice(0, 6) // Show top 6
+  }
 
   // Calculate crop health data based on actual disease percentages
   const calculateCropHealth = () => {
@@ -153,29 +202,9 @@ export const Dashboard: React.FC = () => {
 
   const cropHealthData = calculateCropHealth()
 
-  // Calculate treatment effectiveness based on actual data
-  const calculateTreatmentEffectiveness = () => {
-    const pesticideStats = treatments.reduce((acc: any, treatment) => {
-      const name = treatment.pesticide_name
-      if (!acc[name]) {
-        acc[name] = { total: 0, completed: 0 }
-      }
-      acc[name].total += 1
-      if (treatment.completed) {
-        acc[name].completed += 1
-      }
-      return acc
-    }, {})
-
-    return Object.entries(pesticideStats).map(([pesticide, stats]: [string, any]) => ({
-      pesticide: pesticide.length > 15 ? pesticide.substring(0, 15) + '...' : pesticide,
-      effectiveness: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
-      treatments: stats.total,
-      fullName: pesticide
-    })).slice(0, 5) // Show top 5
-  }
-
-  const treatmentEffectivenessData = calculateTreatmentEffectiveness()
+  const treatmentProgressData = generateTreatmentProgress()
+  const cropHealthTrendData = generateCropHealthTrend()
+  const pesticideUsageData = generatePesticideUsage()
 
   return (
     <div className="space-y-6">
@@ -259,14 +288,213 @@ export const Dashboard: React.FC = () => {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Land Distribution Chart */}
+        {/* Treatment Progress (Last 7 Days) */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <MapPin className="w-5 h-5 text-blue-600 mr-2" />
+            <TrendingUp className="w-5 h-5 text-blue-600 mr-2" />
+            Treatment Progress (7 Days)
+          </h3>
+          {treatmentProgressData.some(d => d.total > 0) ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={treatmentProgressData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#f8fafc', 
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px'
+                  }} 
+                />
+                <Bar dataKey="completed" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="pending" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                <defs>
+                  <linearGradient id="treatmentGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3B82F6" />
+                    <stop offset="100%" stopColor="#1D4ED8" />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-48 text-gray-500 dark:text-gray-400">
+              <p>No treatment data available</p>
+            </div>
+          )}
+        </div>
+
+        {/* Crop Health Trend */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <Shield className="w-5 h-5 text-green-600 mr-2" />
+            Crop Health Trend (30 Days)
+          </h3>
+          {cropHealthTrendData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={cropHealthTrendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" />
+                <YAxis domain={[0, 100]} />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#f8fafc', 
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px'
+                  }} 
+                  formatter={(value, name) => [`${value}%`, name === 'health' ? 'Health Score' : 'Disease Level']}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="health" 
+                  stackId="1" 
+                  stroke="#10B981" 
+                  fill="url(#healthGradient)" 
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="disease" 
+                  stackId="1" 
+                  stroke="#EF4444" 
+                  fill="url(#diseaseGradient)" 
+                />
+                <defs>
+                  <linearGradient id="healthGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                  </linearGradient>
+                  <linearGradient id="diseaseGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-48 text-gray-500 dark:text-gray-400">
+              <p>No health trend data available</p>
+            </div>
+          )}
+        </div>
+
+        {/* Pesticide Usage & Effectiveness */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <Activity className="w-5 h-5 text-purple-600 mr-2" />
+            Pesticide Effectiveness
+          </h3>
+          {pesticideUsageData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={pesticideUsageData} layout="horizontal">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis type="number" domain={[0, 100]} />
+                <YAxis dataKey="pesticide" type="category" width={80} />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: '#f8fafc', 
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px'
+                  }} 
+                  formatter={(value, name, props) => [
+                    `${value}%`,
+                    `Effectiveness (${props.payload?.used} treatments)`
+                  ]}
+                />
+                <Bar dataKey="effectiveness" fill="url(#effectivenessGradient)" radius={[0, 4, 4, 0]} />
+                <defs>
+                  <linearGradient id="effectivenessGradient" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#8B5CF6" />
+                    <stop offset="100%" stopColor="#A855F7" />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-48 text-gray-500 dark:text-gray-400">
+              <p>No pesticide data available</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Monthly Overview and Treatment Timeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Monthly Treatment Overview */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <Calendar className="w-5 h-5 text-blue-600 mr-2" />
+            Monthly Treatment Overview
+          </h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-green-700 dark:text-green-300">This Month</p>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                      {treatments.filter(t => {
+                        const treatmentDate = new Date(t.scheduled_date)
+                        const now = new Date()
+                        return treatmentDate.getMonth() === now.getMonth() && 
+                               treatmentDate.getFullYear() === now.getFullYear()
+                      }).length}
+                    </p>
+                  </div>
+                  <Calendar className="w-8 h-8 text-green-600" />
+                </div>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">Success Rate</p>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                      {treatments.length > 0 ? Math.round((stats.completedTreatments / treatments.length) * 100) : 0}%
+                    </p>
+                  </div>
+                  <Target className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upcoming This Week</h4>
+              <div className="space-y-2">
+                {treatments
+                  .filter(t => {
+                    const treatmentDate = new Date(t.scheduled_date)
+                    const now = new Date()
+                    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+                    return treatmentDate >= now && treatmentDate <= weekFromNow && !t.completed
+                  })
+                  .slice(0, 3)
+                  .map((treatment, index) => (
+                    <div key={index} className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">{treatment.pesticide_name.split(' ')[0]}</span>
+                      <span className="text-gray-500 dark:text-gray-500">
+                        {new Date(treatment.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  ))}
+                {treatments.filter(t => {
+                  const treatmentDate = new Date(t.scheduled_date)
+                  const now = new Date()
+                  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+                  return treatmentDate >= now && treatmentDate <= weekFromNow && !t.completed
+                }).length === 0 && (
+                  <p className="text-sm text-gray-500 dark:text-gray-500">No treatments scheduled this week</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Land Distribution */}
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+            <MapPin className="w-5 h-5 text-orange-600 mr-2" />
             Land Distribution
           </h3>
           {landData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={landData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" />
@@ -285,8 +513,8 @@ export const Dashboard: React.FC = () => {
                 <Bar dataKey="acres" fill="url(#landGradient)" radius={[4, 4, 0, 0]} />
                 <defs>
                   <linearGradient id="landGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10B981" />
-                    <stop offset="100%" stopColor="#059669" />
+                    <stop offset="0%" stopColor="#F97316" />
+                    <stop offset="100%" stopColor="#EA580C" />
                   </linearGradient>
                 </defs>
               </BarChart>
@@ -297,167 +525,61 @@ export const Dashboard: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
 
-        {/* Treatment Status Pie Chart */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <Activity className="w-5 h-5 text-green-600 mr-2" />
-            Treatment Status
-          </h3>
-          {treatmentStatusData.some(d => d.value > 0) ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={treatmentStatusData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                  outerRadius={70}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {treatmentStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#f8fafc', 
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px'
-                  }} 
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-48 text-gray-500 dark:text-gray-400">
-              <p>No treatment data available</p>
-            </div>
-          )}
-        </div>
-
-        {/* Crop Health Status */}
+      {/* Treatment Effectiveness Analysis */}
+      {pesticideUsageData.length > 0 && (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
             <Target className="w-5 h-5 text-purple-600 mr-2" />
-            Crop Health
+            Pesticide Usage & Effectiveness Analysis
           </h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={cropHealthData}
-                cx="50%"
-                cy="50%"
-                innerRadius={40}
-                outerRadius={70}
-                paddingAngle={5}
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-              >
-                {cropHealthData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#f8fafc', 
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px'
-                }} 
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Disease % and Cured % */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Disease Percentage Over Time */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
-            Disease Percentage Over Time
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={diseasePercentages}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="label" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#f8fafc', 
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px'
-                }} 
-                formatter={(value) => [`${value}%`, 'Disease %']}
-              />
-              <Bar dataKey="value" fill="#EF4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Cured Percentage */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <Target className="w-5 h-5 text-green-600 mr-2" />
-            Cured Percentage
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={[{ name: 'Cured', value: curedPercentage }, { name: 'Pending', value: 100 - curedPercentage }]}
-                cx="50%"
-                cy="50%"
-                innerRadius={50}
-                outerRadius={80}
-                paddingAngle={3}
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-              >
-                <Cell fill="#10B981" />
-                <Cell fill="#F59E0B" />
-              </Pie>
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#f8fafc', 
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px'
-                }} 
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Disease Distribution */}
-      {diseaseDistribution.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
-            Disease Distribution
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={diseaseDistribution}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="disease" />
-              <YAxis />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#f8fafc', 
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px'
-                }} 
-              />
-              <Bar dataKey="count" fill="url(#diseaseGradient)" radius={[4, 4, 0, 0]} />
-              <defs>
-                <linearGradient id="diseaseGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#EF4444" />
-                  <stop offset="100%" stopColor="#DC2626" />
-                </linearGradient>
-              </defs>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Usage Frequency</h4>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={pesticideUsageData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="pesticide" />
+                  <YAxis />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#f8fafc', 
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px'
+                    }} 
+                    formatter={(value) => [`${value} times`, 'Used']}
+                  />
+                  <Bar dataKey="used" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Effectiveness Rate</h4>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={pesticideUsageData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="pesticide" />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#f8fafc', 
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px'
+                    }} 
+                    formatter={(value) => [`${value}%`, 'Effectiveness']}
+                  />
+                  <Bar dataKey="effectiveness" fill="url(#effectivenessBarGradient)" radius={[4, 4, 0, 0]} />
+                  <defs>
+                    <linearGradient id="effectivenessBarGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10B981" />
+                      <stop offset="100%" stopColor="#059669" />
+                    </linearGradient>
+                  </defs>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       )}
 
