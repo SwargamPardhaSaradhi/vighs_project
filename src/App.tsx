@@ -19,7 +19,15 @@ const AppRoutes: React.FC = () => {
   const { user, loading } = useAuth()
 
   if (loading) {
-    return <LoadingSpinner />
+    // Add timeout for loading state to prevent infinite loading
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <LoadingSpinner />
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading your account...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -93,6 +101,8 @@ const AppRoutes: React.FC = () => {
             </ProtectedRoute>
           } 
         />
+        {/* Catch all route - redirect to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   )

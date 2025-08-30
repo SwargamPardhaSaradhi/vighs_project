@@ -27,7 +27,12 @@ export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true)
   const [showEmailConfirmation, setShowEmailConfirmation] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState('')
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, clearSession } = useAuth()
+
+  // Clear any existing session data when accessing auth page
+  React.useEffect(() => {
+    clearSession()
+  }, [clearSession])
 
   const loginForm = useForm({
     resolver: yupResolver(loginSchema)
@@ -42,10 +47,13 @@ export const AuthPage: React.FC = () => {
       await signIn(data.email, data.password)
       toast.success('Signed in successfully!')
     } catch (error: any) {
-      if (error.message?.includes('Email not confirmed')) {
+      console.error('Login error:', error)
+      if (error.message?.includes('Email not confirmed') || error.message?.includes('email_not_confirmed')) {
         toast.error('Please check your email and click the confirmation link to activate your account. Don\'t forget to check your spam/junk folder!')
+      } else if (error.message?.includes('Invalid login credentials') || error.message?.includes('invalid_credentials')) {
+        toast.error('Invalid email or password. Please check your credentials and try again.')
       } else {
-        toast.error(error.message || 'Error signing in')
+        toast.error('Unable to sign in. Please try again or contact support if the problem persists.')
       }
     }
   }
